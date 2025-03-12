@@ -17,4 +17,4 @@ Imports:
 Suggests:
     DEoptim,
     GenSA
-    
+RoxygenNote: 7.3.2

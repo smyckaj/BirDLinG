@@ -59,7 +59,61 @@ dbdnnv=function(n,lamb,mu,t,extantonly=F, log=F,jittervar=0.000001){
   return(d)
 }
 
-#vectorized version
+
+#' Probability density function of number of species from a birth-death model
+#'
+#' The function is taken from Luke Harmons book https://lukejharmon.github.io/pcm/pd/phylogeneticComparativeMethods.pdf, but with typo corrected according to Raup 1985 Paleobiology https://www.jstor.org/stable/2400422. All parameters are fully vectorized.
+#' @param n Number of observed species
+#' @param lamb Speciation rate of a birth-death process
+#' @param mu Extinction rate of a birth-death process
+#' @param t Time period after which species are observed
+#' @param extantonly Condition the distribution for non extinction, default is F
+#' @param log Return log-probability, default is F
+#' @param jittervar Standard deviation of a normal distribution by which lamb and mu are jittered in boundary situation
+#' @return Probability of number of species for given alpha and mu
+#' @examples 
+#' 
+#' #test for writing it well, with mu=1, t=1, the distribution should equal to geometric for n-1
+#' dbdn(1,2,0,1)
+#' dbdn(1,3,3,1)
+#' dbdn(0,0,3,1)
+#' dbdn(2,0,3,1)
+#' dbdn(2,-1,3,1)
+#' dbdn(2,0,3,5)
+#' dbdn(2,5,5,5)
+#' dbdn(1,2,0,1)
+#' dgeom(1-1,exp(-2))
+#' 
+#' dbdn(10,2,0,1)
+#' dgeom(10-1,exp(-2))
+#' 
+#' dbdn(1,12,0,1)
+#' dgeom(1-1,exp(-12))
+#' 
+#' #tests for vectorisation
+#' dbdn(1:5,1:5,0,1,log=c(F,T,T,T,T))
+#' dbdn(2,2,0,1,F)
+#' 
+#' #negative values
+#' dbdn(-2,12,0,1)
+#' dbdn(1,-12,0,1)
+#' dbdn(1,12,-10,1)
+#' dbdn(0.1,12,-10,1)
+#'
+#' #the distribution sums to 1
+#' sum(dbdn(0:100000,1,2,1))
+#' sum(dbdn(0:100000,1,0,1))
+#' sum(dbdn(0:100000,1,0.5,10))
+#'
+#' #extantonly testing
+#' dbdn(1,1,2,1,extantonly = F)
+#' dbdn(1,1,2,1, extantonly = T)
+#' dbdn(0,1,2,1, extantonly = F)
+#' dbdn(0,1,2,1, extantonly = T)
+#' sum(dbdn(1:100000,1,2,1,extantonly = T))
+#' sum(dbdn(1:100000,1,2,1,extantonly = F))
+#' sum(dbdn(0,1,2,1,extantonly = F))
+#' @export
 dbdn=function(n,lamb,mu,t,extantonly=F,log=F, jittervar=0.000001){
   #it is technically possibly to vectorize also along extantonly, log and jittervar, why not:-)
   d=mapply(dbdnnv,n = n, lamb = lamb, mu = mu, t=t,extantonly=extantonly, log = log, jittervar=jittervar, SIMPLIFY = T)
@@ -68,53 +122,34 @@ dbdn=function(n,lamb,mu,t,extantonly=F,log=F, jittervar=0.000001){
 
 
 
-
-#test for writing it well, with mu=1, t=1, the distribution should equal to geometric for n-1
-# dbdn(1,2,0,1)
-# dbdn(1,3,3,1)
-# dbdn(0,0,3,1)
-# dbdn(2,0,3,1)
-# dbdn(2,-1,3,1)
-# dbdn(2,0,3,5)
-# dbdn(2,5,5,5)
-# dbdn(1,2,0,1)
-# dgeom(1-1,exp(-2))
-# 
-# dbdn(10,2,0,1)
-# dgeom(10-1,exp(-2))
-# 
-# dbdn(1,12,0,1)
-# dgeom(1-1,exp(-12))
-# 
-# #tests for vectorisation
-# dbdn(1:5,1:5,0,1,log=c(F,T,T,T,T))
-# dbdn(2,2,0,1,F)
-# 
-# #negative values
-# dbdn(-2,12,0,1)
-# dbdn(1,-12,0,1)
-# dbdn(1,12,-10,1)
-# dbdn(0.1,12,-10,1)
-#
-#the distribution sums to 1
-# sum(dbdn(0:100000,1,2,1))
-# sum(dbdn(0:100000,1,0,1))
-# sum(dbdn(0:100000,1,0.5,10))
-#
-#extantonly testing
-# dbdn(1,1,2,1,extantonly = F)
-# dbdn(1,1,2,1, extantonly = T)
-# dbdn(0,1,2,1, extantonly = F)
-# dbdn(0,1,2,1, extantonly = T)
-# 
-# sum(dbdn(1:100000,1,2,1,extantonly = T))
-# sum(dbdn(1:100000,1,2,1,extantonly = F))
-# sum(dbdn(0,1,2,1,extantonly = F))
-
-
 ###############################
 #regression log likelihood, params are in order speciation intercept, speciation slope, extinction intercept, extinction slope
 #data must be a data frame with columns named n, tipspec, tipext, and with rows representing tips species richness after time t, and tip estimates of speciation and extinction 
+
+#' Log-likelihood of linear transformation of tip-estimated lambda and mu using dbdn distribution
+#'
+#' Calculates a log-likelihood as a sum of individual log probabilities for individual data points with real lambdas and mus being the linenar functions of observed tip lambdas and mus 
+#' @param params A vector of length 4, with regression parameters ordered c(intercept_lambda, slope_lambda, intercept_mu, slope_mu)
+#' @param data A data frame with columns n, tipspec and tipext, referring to number of species resulting from every tip after time t, estimated tip speciation and tip extinction rates 
+#' @param t Time period after which species are observed
+#' @param extantonly Condition the distribution for non extinction, default is F
+#' @param jittervar Standard deviation of a normal distribution by which lamb and mu are jittered in boundary situation
+#' @return Log-likelihood value
+#' @examples 
+#' #dataset without extinct tips
+#' testdata=data.frame(n=1:10,tipspec=1:10,tipext=rep(0,10))
+#' bdnregloglik(c(0,1,0,0),testdata,1)
+#' bdnregloglik(c(0,1,1,0),testdata,1)
+#' bdnregloglik(c(0,1,0,1),testdata,1)
+#' bdnregloglik(c(0,1,1,1),testdata,1)
+#' 
+#' #dataset with extinct tips
+#' testdata0=data.frame(n=0:10,tipspec=0:10,tipext=rep(0,11))
+#' bdnregloglik(c(0,1,1,0),testdata0,1, extantonly = T)
+#' bdnregloglik(c(0,1,1,0),testdata0,1, extantonly = F)
+#' bdnregloglik(c(0,1,1,0),testdata,1, extantonly = T)
+#' bdnregloglik(c(0,1,1,0),testdata,1, extantonly = F)
+#' @export
 bdnregloglik=function(params,data,t,extantonly=F, jittervar=0.000001){
   #equations for expected speciation and extinction rates based on tip rate metrics
   lambhat=params[1]+params[2]*data$tipspec
@@ -127,23 +162,6 @@ bdnregloglik=function(params,data,t,extantonly=F, jittervar=0.000001){
 
 
 
-#tests
-# testdata=data.frame(n=1:10,tipspec=1:10,tipext=rep(0,10))
-# bdnregloglik(c(0,1,0,0),testdata,1)
-# bdnregloglik(c(0,1,1,0),testdata,1)
-# bdnregloglik(c(0,1,0,1),testdata,1)
-# bdnregloglik(c(0,1,1,1),testdata,1)
-# 
-# testdata0=data.frame(n=0:10,tipspec=0:10,tipext=rep(0,11))
-# bdnregloglik(c(0,1,1,0),testdata0,1, extantonly = T)
-# bdnregloglik(c(0,1,1,0),testdata0,1, extantonly = F)
-# bdnregloglik(c(0,1,1,0),testdata,1, extantonly = T)
-# bdnregloglik(c(0,1,1,0),testdata,1, extantonly = F)
-#
-# bdnregloglik(c(0,1,1,0),testdata,1)
-# bdnregloglik(c(0,1,0,1),testdata,1)
-# bdnregloglik(c(0,1,1,1),testdata,1)
-
 ###############################
 #saturated likelihood
 #first explore behaviour of dbdn for boundary conditions where it shows NaN
@@ -153,12 +171,12 @@ bdnregloglik=function(params,data,t,extantonly=F, jittervar=0.000001){
 # dbdn(1,0.000000000000001+0.1,0.1,1)
 # dbdn(1,0.000000000000001+0.2,0.2,1)
 # dbdn(1,0.0000000000000000000000000000000001,0,1)
-
+#
 #put likelihood 1 for n=0
 # dbdn(0,0.0000000000000000000000000000000001,2,1)
 # dbdn(0,0.0000000000000000000000000000000001,200,1)
 # dbdn(0,0.1,2,1)
-
+#
 #look at which parameter combinations are most probable for n>1, it is the ones where mu=0 and lamb=log(n), see deterministic equation in Harmons book
 # dbdn(2,log(2),0,1)
 # dbdn(2,log(2)+0.1,0.1,1)
@@ -168,7 +186,7 @@ bdnregloglik=function(params,data,t,extantonly=F, jittervar=0.000001){
 
 #this function calculates a saturated probability mass for every count of species, i.e. maximum of probability mass function
 #it also works around jittering for NaN values, by inputting asymptotic values in branching
-dbdnsatnv=function(n,mu=0,t=1,extantonly=F,log=F, 
+dbdnsatnv=function(n,mu=0,t=1,extantonly=F,log=F, jittervar=0.000001,
                    extinctmarginal=F, startval=0.1,
                    optimpar_plex = list(reltolpar=1e-04, 
                                         reltolval=1e-05, 
@@ -179,7 +197,7 @@ dbdnsatnv=function(n,mu=0,t=1,extantonly=F,log=F,
   if(extinctmarginal){
     # if we pick marginalisation over extinction, the function will find optimal lambda for given extinction numerically
     fn=function(lambda){
-      dbdn(n=n, lamb=lambda, mu=mu, t=t, extantonly=extantonly)
+      dbdn(n=n, lamb=lambda, mu=mu, t=t, extantonly=extantonly,jittervar=jittervar)
     }
     
     d=optimglwrap(optimmethod = "subplex",
@@ -199,7 +217,7 @@ dbdnsatnv=function(n,mu=0,t=1,extantonly=F,log=F,
     }else if(n==1){
       d=1 #for mu=0 and lamb=0
     }else{
-      d=dbdn(n,lamb=log(n)/t, mu=0, t=t,extantonly=extantonly,log=F) #deterministic equation
+      d=dbdn(n,lamb=log(n)/t, mu=0, t=t,extantonly=extantonly,log=F,jittervar=jittervar) #deterministic equation
     }
   }
 
@@ -210,69 +228,108 @@ dbdnsatnv=function(n,mu=0,t=1,extantonly=F,log=F,
   return(d)
 }
 
-#vectorized
-dbdnsat=function(n,mu=0,t=1,extantonly=F, log=F,
+
+#' Saturated likelihood of lambda and mu values for individual tip counts
+#'
+#' Calculates a saturated likelihoods for individual species counts, i.e. the maximum values of dbdn function across lambda and mu. All parameters are fully vectorized.
+#' @param n Number of observed species
+#' @param mu Assumed extinction rate of a birth-death process in case we use extinction marginalisation
+#' @param t Time period after which species are observed
+#' @param extantonly Condition the distribution for non extinction, default is F
+#' @param log Return log-probability, default is F
+#' @param jittervar Standard deviation of a normal distribution by which lamb and mu are jittered in boundary situation
+#' @param extinctmarginal Do we marginalize the distribution over the assumed mu values, default is F
+#' @param startval Starting values of the subplex optimisation of lambda in case we marginalize over assumed mu
+#' @param optimpar_plex The control list of subplex optimisation of lambda in case we marginalize over assumed mu
+#' @return Probability of number of species for maximum lambda and mu
+#' @examples 
+#' #test if it matches nonsaturated lhs
+#' dbdnsat(1:10)
+#' dbdn(1:10, log(1:10),0, t=1)
+#'
+#' #test marginalized version
+#' dbdnsatnv(5,extinctmarginal = F)
+#' dbdnsatnv(5,extinctmarginal = T)
+#' dbdnsatnv(5,mu=5,extinctmarginal = T)
+#' curve(dbdn(n=5,lamb=x,mu=0,t=1),0,10)
+#' curve(dbdn(n=5,lamb=x,mu=5,t=1),add=T)
+#' dbdnsat(5,extinctmarginal = F)
+#' dbdnsat(0:5,extinctmarginal = F)
+#' dbdnsat(0:5,extinctmarginal = T)
+#' dbdnsat(0:5,mu=c(10,0,0,0,0,0),extinctmarginal = T)
+#' dbdnsat(0:5,mu=c(1,1,1,1,1,1),extinctmarginal = c(F,T,T,F,F,F))
+#' dbdnsat(0:5,mu=0,extinctmarginal = T,startval=c(0,0,0,0,-10,-10))
+#' @export
+dbdnsat=function(n,mu=0,t=1,extantonly=F, log=F, jittervar=0.000001,
                  extinctmarginal=F, startval=0.1,
                  optimpar_plex = list(reltolpar=1e-04, 
                                       reltolval=1e-05, 
                                       abstolpar=1e-07,
                                       maxiter=10000, 
                                       num_cycles=1)){
-  d=mapply(dbdnsatnv,n = n, mu=mu, t=t, extantonly=extantonly, log = log,
+  d=mapply(dbdnsatnv,n = n, mu=mu, t=t, extantonly=extantonly, log = log, jittervar=jittervar,
            extinctmarginal=extinctmarginal, startval=startval, 
            MoreArgs = list(optimpar_plex=optimpar_plex),
            SIMPLIFY = T)
   return(d)
 }
 
-#test if it matches nonsaturated lhs
-# dbdnsat(1:10)
-# dbdn(1:10, log(1:10),0, t=1)
-
-#test marginalized version
-# dbdnsatnv(5,extinctmarginal = F)
-# dbdnsatnv(5,extinctmarginal = T)
-# dbdnsatnv(5,mu=5,extinctmarginal = T)
-# curve(dbdn(n=5,lamb=x,mu=0,t=1),0,10)
-# curve(dbdn(n=5,lamb=x,mu=5,t=1),add=T)
-# dbdnsat(5,extinctmarginal = F)
-# dbdnsat(0:5,extinctmarginal = F)
-# dbdnsat(0:5,extinctmarginal = T)
-# dbdnsat(0:5,mu=c(10,0,0,0,0,0),extinctmarginal = T)
-# dbdnsat(0:5,mu=c(1,1,1,1,1,1),extinctmarginal = c(F,T,T,F,F,F))
-# dbdnsat(0:5,mu=0,extinctmarginal = T,startval=c(0,0,0,0,-10,-10))
 
   
-#calculate saturated loglikelihood of counts 
-bdnsatloglik=function(data, mus=0, t=1, extantonly=F,
+#' Saturated log-likelihood for the whole dataset
+#'
+#' Calculates a saturated log-likelihood as a sum of individual saturated log probabilities for individual data points, i.e. the maximum likelihood if lambda and mu are left free for every data point. Allows for marginalization of distributions using supplied mu values.
+#' @param data A data frame with columns n, tipspec and tipext, referring to number of species resulting from every tip after time t, estimated tip speciation and tip extinction rates 
+#' @param mu Assumed extinction rates of a birth-death process in case we use extinction marginalisation
+#' @param t Time period after which species are observed
+#' @param extantonly Condition the distribution for non extinction, default is F
+#' @param jittervar Standard deviation of a normal distribution by which lamb and mu are jittered in boundary situation
+#' @param extinctmarginal Do we marginalize the distribution over the assumed mu values, default is F
+#' @param startval Starting values of the subplex optimisation of lambda in case we marginalize over assumed mu
+#' @param optimpar_plex The control list of subplex optimisation of lambda in case we marginalize over assumed mu
+#' @return Saturated log-likelihood value
+#' @examples 
+#' testdata=data.frame(n=1:10,tipspec=1:10,tipext=rep(0,10))
+#' bdnsatloglik(testdata,t=1,extinctmarginal = F)
+#' bdnsatloglik(testdata,t=1,extinctmarginal = T)
+#' bdnsatloglik(testdata,mus=1,t=1,extinctmarginal = T)
+#' bdnsatloglik(testdata,mus=rep(1,10),t=1,extinctmarginal = T)
+#' bdnsatloglik(testdata,t=1,extinctmarginal = T, startval = c(0,0,0,0,0,0,0,0,0,0))
+#' bdnsatloglik(testdata,t=1,extinctmarginal = T, startval = c(-10,0,0,0,0,0,0,0,0,0))
+#' bdnsatloglik(testdata,t=1,extinctmarginal = T, startval = c(0,0,0,0,0,0,0,0,0,-10))
+#' @export
+bdnsatloglik=function(data, mus=0, t=1, extantonly=F, jittervar=0.000001,
                       extinctmarginal=F, startval=0.1,
                       optimpar_plex = list(reltolpar=1e-04, 
                                            reltolval=1e-05, 
                                            abstolpar=1e-07,
                                            maxiter=10000, 
                                            num_cycles=1)){
-  llhsat=sum(dbdnsat(n = data$n, mu=mus,t=t, extantonly=extantonly, log = TRUE, 
+  llhsat=sum(dbdnsat(n = data$n, mu=mus,t=t, extantonly=extantonly, jittervar=jittervar, log = TRUE, 
                      extinctmarginal=extinctmarginal, startval=startval, optimpar_plex=optimpar_plex))
   return(llhsat)
 }
 
-#test
-# testdata=data.frame(n=1:10,tipspec=1:10,tipext=rep(0,10))
-# bdnregloglik(c(0,1,0,0),testdata,1)
-# bdnregloglik(c(0,1,1,0),testdata,1)
-# bdnregloglik(c(0,1,0,1),testdata,1)
-# bdnregloglik(c(-2,1,1,0),testdata,1)
-# 
-# bdnsatloglik(testdata,t=1,extinctmarginal = F)
-# bdnsatloglik(testdata,t=1,extinctmarginal = T)
-# bdnsatloglik(testdata,mus=1,t=1,extinctmarginal = T)
-# bdnsatloglik(testdata,mus=rep(1,10),t=1,extinctmarginal = T)
-# bdnsatloglik(testdata,t=1,extinctmarginal = T, startval = c(0,0,0,0,0,0,0,0,0,0))
-# bdnsatloglik(testdata,t=1,extinctmarginal = T, startval = c(-10,0,0,0,0,0,0,0,0,0))
-# bdnsatloglik(testdata,t=1,extinctmarginal = T, startval = c(0,0,0,0,0,0,0,0,0,-10))
 
 
 
+#' Saturated log-likelihood for the whole dataset (with linear conditioning of extinction)
+#'
+#' Calculates a saturated log-likelihood as a sum of individual saturated log probabilities for individual data points, with marginalization of extinction as a maximum likelihood fitted linear function fo tip observed extinction values.
+#' @param data A data frame with columns n, tipspec and tipext, referring to number of species resulting from every tip after time t, estimated tip speciation and tip extinction rates 
+#' @param t Time period after which species are observed
+#' @param startvals Starting values of the subplex optimisation of lambdas, mu intercept and mu slope in this order, vector of length n+2
+#' @param extantonly Condition the distribution for non extinction, default is F
+#' @param jittervar Standard deviation of a normal distribution by which lamb and mu are jittered in boundary situation
+#' @param optimpar_plex The control list of subplex optimisation of lambdas and mu parameters
+#' @param onlyfout Return just functional value or full output of optimisation, default is T
+#' @return Saturated log-likelihood value
+#' @examples 
+#' testdata=data.frame(n=0:9,tipspec=1:10,tipext=rep(1,10))
+#' bdnsatloglik(testdata,t=1,extinctmarginal = F)
+#' bdnsatloglik(testdata,mus=testdata$tipext,t=1,extinctmarginal = T)
+#' dbdnsatlinear(testdata, t=1, startvals=c(rep(0.1,length(testdata$n)),0.1,0.1), onlyfout = F)
+#' @export
 dbdnsatlinear=function(data, t, 
                        startvals, 
                        extantonly=F, jittervar=0.0001,
@@ -311,15 +368,49 @@ dbdnsatlinear=function(data, t,
   return(out2)
   
 }
-#test
-# testdata=data.frame(n=0:9,tipspec=1:10,tipext=rep(1,10))
-# bdnsatloglik(testdata,t=1,extinctmarginal = F)
-# bdnsatloglik(testdata,mus=testdata$tipext,t=1,extinctmarginal = T)
-# dbdnsatlinear(testdata, t=1, startvals=c(rep(0.1,length(testdata$n)),0.1,0.1), onlyfout = F)
+
 
 
 ###############################
 #maximum likelihood under different free parameters
+
+#' Maximum likelihood estimation of linear regression using dbdn distribution
+#'
+#' Estimates maximum likelihood values of linear regression parameters of a model where number of species after time t is drawn from a dbdn distribution with lambda and mu estimated as linear functions of tip observed lambda and mus.  
+#' @param data A data frame with columns n, tipspec and tipext, referring to number of species resulting from every tip after time t, estimated tip speciation and tip extinction rates 
+#' @param t Time period after which species are observed
+#' @param startval Starting or fixed values for the optimisation of model parameters, lambda intercept, lambda slope, mu intercept and mu slope in this order, vector of length 4
+#' @param freeparid Indices of model parameters startval that are free to be be optimised
+#' @param extantonly Condition the distribution for non extinction, default is F
+#' @param jittervar Standard deviation of a normal distribution by which lamb and mu are jittered in boundary situation
+#' @param optimmethod Optimisation algorithm to use, default local "subplex" was sufficient in our testing, but "simplex"  or global "GenSA" or "DEoptim" can also be used
+#' @param optimpar_plex List of optimisation parameters passed to local "subplex" or "simplex" routines if these are used
+#' @param optimpar_DE List of optimisation parameters passed to "DE_optim" if this algorithm used
+#' @param optimpar_GenSA List of optimisation parameters passed to "GenSA" if this algorithm used
+#' @param convdetails Return convergence diagnostics, default is F
+#' @return A list of all parameter values par, free parameter values parexp, maximum log-likelihood llh and optionally convergence details 
+#' @examples 
+#' testdata=data.frame(n=1:10,tipspec=1:10,tipext=rep(0,10))
+#' 
+#' bdnmaxlikval=bdnmaxlik(data=testdata, t=1, startval=c(0,1,0,0),freeparid = 1:4)
+#' bdnmaxlikval$par
+#' bdnmaxlikval$llh
+#' 
+#' bdnsatloglikval=bdnsatloglik(testdata,1)
+#' bdnsatloglikval
+#' 
+#' testdata2=data.frame(n=1:10,tipspec=1:10,tipext=20:11)
+#' 
+#' bdnmaxlikval=bdnmaxlik(data=testdata2, t=1, startval=c(0,1,0,0),freeparid = 1:4)
+#' bdnmaxlikval$par
+#' bdnmaxlikval$llh
+#' 
+#' bdnsatloglikval=bdnsatloglik(testdata,1)
+#' bdnsatloglikval
+#' 
+#' restbdnmaxlikval=bdnmaxlik(data=testdata2, t=1, startval=c(0,0,0,0),freeparid = c(1,3,4))
+#' restbdnmaxlikval
+#' @export
 bdnmaxlik=function(data, t, 
                    startval, freeparid,
                    extantonly=F, jittervar=0.0001,
@@ -402,30 +493,48 @@ bdnmaxlik=function(data, t,
 }
 
 
-#test
-# testdata=data.frame(n=1:10,tipspec=1:10,tipext=rep(0,10))
-# 
-# bdnmaxlikval=bdnmaxlik(data=testdata, t=1, startval=c(0,1,0,0),freeparid = 1:4)
-# bdnmaxlikval$par
-# bdnmaxlikval$llh
-# 
-# bdnsatloglikval=bdnsatloglik(testdata,1)
-# bdnsatloglikval
-# 
-# testdata2=data.frame(n=1:10,tipspec=1:10,tipext=20:11)
-# 
-# bdnmaxlikval=bdnmaxlik(data=testdata2, t=1, startval=c(0,1,0,0),freeparid = 1:4)
-# bdnmaxlikval$par
-# bdnmaxlikval$llh
-# 
-# bdnsatloglikval=bdnsatloglik(testdata,1)
-# bdnsatloglikval
-# 
-# restbdnmaxlikval=bdnmaxlik(data=testdata2, t=1, startval=c(0,0,0,0),freeparid = c(1,3,4))
-# restbdnmaxlikval
 
 ###############################
 #generalized r square via deviance ratio
+
+#' Generalized Rsquare of linear regression using dbdn distribution
+#'
+#' Generalized Rsquare of linear regression parameters of a model where number of species after time t is drawn from a dbdn distribution with lambda and mu estimated as linear functions of tip observed lambda and mus.  
+#' @param data A data frame with columns n, tipspec and tipext, referring to number of species resulting from every tip after time t, estimated tip speciation and tip extinction rates 
+#' @param t Time period after which species are observed
+#' @param startvalalt Starting or fixed values for the alternative model, lambda intercept, lambda slope, mu intercept and mu slope in this order, vector of length 4
+#' @param freeparidalt Indices of alternative model parameters startvalalt that are free to be be optimised
+#' @param startvalnul Starting or fixed values for the null model, lambda intercept, lambda slope, mu intercept and mu slope in this order, vector of length 4
+#' @param freeparidnul Indices of alternative model parameters startvalalt that are free to be be optimised, default is c(1,3), that is lambda and mu intercepts
+#' @param extantonly Condition the distribution for non extinction, default is F
+#' @param jittervar Standard deviation of a normal distribution by which lamb and mu are jittered in boundary situation
+#' @param extmargtype Type of extinction marginalisation, default is "no" i.e. mu is freely optimised, but can be "sats_as_alt" where extinction estimates froma lternative model are used, "sat1_as_alt_sat2_as_null" where extinction estimates from both alternative and null model are used in the numerator and denominator of R square formula, or "linear" where mus are optimised but constrained to be linear function of tip observed mus
+#' @param startvalsat Starting value of extinction marginalisation procedure, default is "as_alt" i.e. taking them from alternative model estimates, but can be user supplied too
+#' @param optimmethod Optimisation algorithm to use, default local "subplex" was sufficient in our testing, but "simplex"  or global "GenSA" or "DEoptim" can also be used
+#' @param optimpar_plex List of optimisation parameters passed to local "subplex" or "simplex" routines if these are used
+#' @param optimpar_DE List of optimisation parameters passed to "DE_optim" if this algorithm used
+#' @param optimpar_GenSA List of optimisation parameters passed to "GenSA" if this algorithm used
+#' @param convdetails Return convergence diagnostics, default is F
+#' @return A list of generalized R square genRsquare,deviance of alternative model devalt, deviance of null model devnull, log-likelihood of alternative model loglikalt, log-likelihood of null model logliknul, saturated log-likelihood in the numerator of Rsquare formula logliksat1, saturated log-likelihood in the numerator of Rsquare formula logliksat2, regression parameters of alternative model paralt, regression parameters of null model parnul, and optionally convergence details 
+#' @examples 
+#' testdata2=data.frame(n=1:10,tipspec=1:10,tipext=20:11)
+#' r=bdngenRsquare(data=testdata2, t=1,
+#'                 startvalalt=c(0.5,1,0.5,1), freeparidalt=c(1,2,3,4),
+#'                 startvalnul=c(0.5,0,0.5,0), freeparidnul=c(1,3))
+#' r
+#' 
+#' re=bdngenRsquare(data=testdata2, t=1, jittervar = 10,
+#'                  startvalalt=c(0.5,1,0.5,1), freeparidalt=c(1,2,3,4),
+#'                  startvalnul=c(0.5,0,0.5,0), freeparidnul=c(1,3),
+#'                  extantonly = T)
+#' re
+#' 
+#' rm=bdngenRsquare(data=testdata2, t=1,
+#'                 startvalalt=c(0.5,1,0.5,1), freeparidalt=c(1,2,3,4),
+#'                 startvalnul=c(0.5,0,0.5,0), freeparidnul=c(1,3),
+#'                 extmargtype = "linear")
+#' rm
+#' @export
 bdngenRsquare=function(data, t, 
                        startvalalt, freeparidalt,
                        startvalnul, freeparidnul=c(1,3),
@@ -593,32 +702,20 @@ bdngenRsquare=function(data, t,
 }
 
 
-#test
-# testdata2=data.frame(n=1:10,tipspec=1:10,tipext=20:11)
-# r=bdngenRsquare(data=testdata2, t=1,
-#                 startvalalt=c(0.5,1,0.5,1), freeparidalt=c(1,2,3,4),
-#                 startvalnul=c(0.5,0,0.5,0), freeparidnul=c(1,3))
-# r
-# 
-# re=bdngenRsquare(data=testdata2, t=1, jittervar = 10,
-#                  startvalalt=c(0.5,1,0.5,1), freeparidalt=c(1,2,3,4),
-#                  startvalnul=c(0.5,0,0.5,0), freeparidnul=c(1,3),
-#                  extantonly = T
-# )
-# re
-# 
-# rm=bdngenRsquare(data=testdata2, t=1,
-#                 startvalalt=c(0.5,1,0.5,1), freeparidalt=c(1,2,3,4),
-#                 startvalnul=c(0.5,0,0.5,0), freeparidnul=c(1,3),
-#                 extinctmarginal = T
-#                 )
-# rm
-
-
-
-
-
+###############################
 #optimizer with local simplex, subplex or global DEoptim and GenSA algorithms, the global ones currently overwhelm the memory stack 
+
+#' Wrapper for various local and global optimiser routines
+#'
+#' Wrapper function for subplex, simplex, differential evolution (DEoptim) and generalized simulated annealing (GenSA) optimisation routines.
+#' @param optimmethod Optimisation algorithm to use, default is local "subplex", but "simplex"  or global "GenSA" or "DEoptim" can also be used
+#' @param optimpar_plex List of optimisation parameters passed to local "subplex" or "simplex" routines if these are used, relative tolerance of parameters, relative tolerance of functional values, absolute tolerance of parameters, number of iterations and number of cycles for which the routine is run from the start can be set
+#' @param optimpar_DE List of optimisation parameters passed to "DE_optim" if this algorithm used, see DEoptim package for details
+#' @param optimpar_GenSA List of optimisation parameters passed to "GenSA" if this algorithm used, see GenSA package for details
+#' @param fc Function to be optimised
+#' @param trparsopt Starting values used in subplex, simplex or GenSA
+#' @return A list of generalized R square genRsquare,deviance of alternative model devalt, deviance of null model devnull, log-likelihood of alternative model loglikalt, log-likelihood of null model logliknul, saturated log-likelihood in the numerator of Rsquare formula logliksat1, saturated log-likelihood in the numerator of Rsquare formula logliksat2, regression parameters of alternative model paralt, regression parameters of null model parnul, and optionally convergence details 
+#' @export
 optimglwrap=function(optimmethod = 'simplex',
                      optimpar_plex = list(reltolpar=1e-04, 
                                           reltolval=1e-05, 
@@ -663,7 +760,6 @@ optimglwrap=function(optimmethod = 'simplex',
                                            seed = -100377),
                      fc,
                      trparsopt,
-                     jitter = 0.01,
                      ...)
 {
   
@@ -787,8 +883,25 @@ optimglwrap=function(optimmethod = 'simplex',
 # axisPhylo()
 
 
-
-#Simulation function
+#' Simulation procedure for input data of bdn linear models
+#'
+#' A function generating numbers data frame with numbers of species n resulting from a birth-death processes with given lambdas, mus and ts. All these three parameters are vectorized over.
+#' @param lambdas Vector od speciation rates lambda
+#' @param mus Vector of extinction rates mu
+#' @param ts Vector of waiting times t
+#' @param extantonly Iterate until a surviving tree is produced
+#' @return A data frame with columns n, tipspec, tipext and time, referring to number of species resulting from every tip after given  tip speciation, tip extinction rates, and waiting times 
+#' @examples
+#' bdntreesim(rep(1,1000),rep(0,1000),rep(1,1000))
+#' mean(bdntreesim(rep(1,1000),rep(0,1000),rep(1,1000))$n)
+#' exp(1)
+#' 
+#' mean(bdntreesim(rep(2,1000),rep(0,1000),rep(1,1000))$n)
+#' exp(2)
+#' 
+#' mean(bdntreesim(rep(2,1000),rep(1,1000),rep(1,1000))$n)
+#' exp(1)
+#' @export
 bdntreesim=function(lambdas,mus,ts,extantonly=F){
   fn=function(lambda, mu, t, extantonly){
     repeat{
@@ -820,14 +933,5 @@ bdntreesim=function(lambdas,mus,ts,extantonly=F){
   return(d)
 }
 
-# bdntreesim(rep(1,1000),rep(0,1000),rep(1,1000))
-# mean(bdntreesim(rep(1,1000),rep(0,1000),rep(1,1000))$n)
-# exp(1)
-# 
-# mean(bdntreesim(rep(2,1000),rep(0,1000),rep(1,1000))$n)
-# exp(2)
-# 
-# mean(bdntreesim(rep(2,1000),rep(1,1000),rep(1,1000))$n)
-# exp(1)
 
 
